@@ -1,0 +1,16 @@
+{
+  "model": {"operation": "extrude", "thickness": 10},
+  "material": "AL6061",
+  "mesh": {"size": 3, "order": 2},
+  "boundary_conditions": [
+    {"type": "fixed", "on": "hole:0"},
+    {"type": "fixed", "on": "hole:1"}
+  ],
+  "loads": [
+    {"type": "force", "on": "hole:3", "value": [0, -3000, 0]},
+    {"type": "gravity", "value": [0, -9810, 0]}
+  ],
+  "analysis": {"static": true, "modal": 6},
+  "solver": "auto",
+  "output": {"stl": true, "vtk": true, "report": true}
+}

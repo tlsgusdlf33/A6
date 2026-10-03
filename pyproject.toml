@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drawing2fea"
+version = "0.1.0"
+description = "2D drawing (DXF/JSON) -> 3D model -> automatic FEA (static + modal)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.10", "ezdxf>=1.1", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+fast = ["pypardiso>=0.4", "pyamg>=5.0"]
+yaml = ["pyyaml"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+drawing2fea = "drawing2fea.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["drawing2fea*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
