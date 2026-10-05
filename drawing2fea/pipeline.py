@@ -17,6 +17,10 @@ from .export import write_stl, write_vtk
 from .materials import get_material
 from .mesh2d import triangulate
 from .model3d import extrude, remove_unused_nodes, revolve, to_quadratic
+from .views import (ThreeViewDrawing, build_view_mesh, hole_specs, load_three_views,
+                    looks_like_three_views, read_strokes)
+
+_EXTRUDE_REVOLVE_KEYS = ("THICKNESS", "THK", "REVOLVE", "ANGLE")
 
 
 def _auto_mesh_size(profile: Profile2D, cfg: dict) -> float:
@@ -78,10 +82,54 @@ def build_model(profile: Profile2D, cfg: dict, warnings: list[str]):
     return m2, mesh, h
 
 
+def build_views_model(tv: ThreeViewDrawing, cfg: dict, warnings: list[str]):
+    """3D solid + tet mesh reconstructed from a front/top/side drawing."""
+    axis_cfg = cfg["views"].get("axis")
+    axis = "xyz".index(axis_cfg.lower()) if axis_cfg else None
+    h = float(cfg["mesh"]["size"] or tv.size.max() / 25.0)
+    max_el = int(cfg["mesh"]["max_elements"])
+    h0 = h
+    for _ in range(6):
+        mesh, info = build_view_mesh(tv, h, axis)
+        if len(mesh.elements) <= max_el:
+            break
+        h *= (len(mesh.elements) / max_el) ** (1 / 3) * 1.05
+    if h != h0:
+        warnings.append(f"mesh size increased from {h0:.3g} to {h:.3g} mm to stay under "
+                        f"{max_el} elements (raise mesh.max_elements for a finer mesh)")
+    if abs(mesh.volume - info["expected_volume_mm3"]) > 1e-3 * info["expected_volume_mm3"]:
+        warnings.append(f"mesh volume {mesh.volume:.6g} differs from the reconstructed solid "
+                        f"{info['expected_volume_mm3']:.6g} mm³")
+    if info["stepped_regions"]:
+        warnings.append(f"curved/slanted edges seen across the slicing axis ({info['slab_axis']}) are "
+                        f"approximated by steps of {info['step_size_mm']:.3g} mm")
+    if int(cfg["mesh"]["order"]) == 2:
+        mesh = to_quadratic(mesh)
+    slab_axis = "xyz".index(info["slab_axis"])
+    return mesh, h, info, hole_specs(tv, slab_axis, h)
+
+
+def _wants_views(path: Path, file_cfg: dict, overrides: dict | None):
+    """Decide whether a DXF is a three-view drawing. Returns (strokes, annotations) or None."""
+    if path.suffix.lower() != ".dxf":
+        return None
+    forced = None
+    for src in (file_cfg or {}, overrides or {}):
+        forced = (src.get("model") or {}).get("operation", forced)
+    if forced is not None and forced != "views":
+        return None
+    strokes, ann = read_strokes(path)
+    if forced == "views" or ann.get("VIEWS") or "PROJECTION" in ann or ann.get("OPERATION", "").lower() == "views":
+        return strokes, ann
+    if any(k in ann for k in _EXTRUDE_REVOLVE_KEYS) or "OPERATION" in ann:
+        return None
+    return (strokes, ann) if looks_like_three_views(strokes) else None
+
+
 def _default_bcs(cfg: dict, warnings: list[str]) -> None:
     op = cfg["model"]["operation"]
     if not cfg["boundary_conditions"] and cfg["analysis"].get("static"):
-        sel = "xmin" if op == "extrude" else "zmin"
+        sel = "xmin" if op == "extrude" else "zmin"  # revolve / views: bottom face
         cfg["boundary_conditions"] = [{"type": "fixed", "on": sel}]
         warnings.append(f"no constraint given: assumed fully fixed face '{sel}'")
     if not cfg["loads"] and cfg["analysis"].get("static"):
@@ -106,16 +154,38 @@ def run_pipeline(drawing_path: str | Path, out_dir: str | Path = "results",
     t0 = time.perf_counter()
     file_cfg = config if isinstance(config, dict) else load_config_file(config)
     layers = (file_cfg or {}).get("drawing_layers") or (overrides or {}).get("drawing_layers")
-    profile = load_drawing(drawing_path, layers=layers)
-    if "_WARNING" in profile.annotations:
-        warnings.append(profile.annotations.pop("_WARNING"))
-    cfg = resolve_config(profile.annotations, file_cfg, overrides)
+    drawing_path = Path(drawing_path)
+    views_input = _wants_views(drawing_path, file_cfg, overrides)
+    profile = tv = m2 = None
+    holes = None
+    if views_input is not None:
+        cfg = resolve_config(views_input[1], file_cfg, overrides)
+        cfg["model"]["operation"] = "views"
+        tv = load_three_views(drawing_path, cfg["views"].get("projection"),
+                              bool(cfg["views"].get("assume_through")), views_input)
+        warnings.extend(tv.warnings)
+        drawing_summary = tv.summary()
+        log(f"[1/5] drawing: 3 views ({tv.projection}-angle projection), part "
+            f"{tv.size[0]:.4g} x {tv.size[1]:.4g} x {tv.size[2]:.4g} mm, "
+            f"{len(tv.cuts)} hole(s), {sum(f.kind == 'boss' for f in tv.features)} boss(es)")
+    else:
+        profile = load_drawing(drawing_path, layers=layers)
+        if "_WARNING" in profile.annotations:
+            warnings.append(profile.annotations.pop("_WARNING"))
+        cfg = resolve_config(profile.annotations, file_cfg, overrides)
+        if cfg["model"]["operation"] == "views":
+            raise ValueError("three-view reconstruction needs a DXF drawing with front, top and side views")
+        drawing_summary = profile.summary()
+        log(f"[1/5] drawing: {len(profile.regions)} region(s), {len(profile.holes)} hole(s), "
+            f"area {profile.area:.6g} mm²")
     timing["read drawing"] = time.perf_counter() - t0
-    log(f"[1/5] drawing: {len(profile.regions)} region(s), {len(profile.holes)} hole(s), "
-        f"area {profile.area:.6g} mm²")
 
     t0 = time.perf_counter()
-    m2, mesh, h = build_model(profile, cfg, warnings)
+    if tv is not None:
+        mesh, h, view_info, holes = build_views_model(tv, cfg, warnings)
+        cfg["model"].update(view_info)
+    else:
+        m2, mesh, h = build_model(profile, cfg, warnings)
     mat = get_material(cfg["material"])
     timing["3D modeling + mesh"] = time.perf_counter() - t0
     etype = "tet10" if mesh.order == 2 else "tet4"
@@ -124,7 +194,7 @@ def run_pipeline(drawing_path: str | Path, out_dir: str | Path = "results",
 
     results: dict = {
         "version": __version__,
-        "drawing": profile.summary(),
+        "drawing": drawing_summary,
         "model": dict(cfg["model"]),
         "material": mat.to_dict(),
         "mesh": {"elements": int(len(mesh.elements)), "nodes": int(len(mesh.nodes)),
@@ -140,7 +210,7 @@ def run_pipeline(drawing_path: str | Path, out_dir: str | Path = "results",
     timing["assembly"] = time.perf_counter() - t0
 
     _default_bcs(cfg, warnings)
-    selector = FaceSelector(mesh, profile, h)
+    selector = FaceSelector(mesh, profile, h, holes)
     cons, bc_log = build_constraints(selector, cfg["boundary_conditions"])
     results["boundary_conditions"] = bc_log
     results["loads"] = []
@@ -206,7 +276,7 @@ def run_pipeline(drawing_path: str | Path, out_dir: str | Path = "results",
     if cfg["output"].get("report", True):
         from .report import make_figures, write_html_report
 
-        figs = make_figures(out, profile, m2, mesh, results, fields)
+        figs = make_figures(out, profile if tv is None else tv, m2, mesh, results, fields)
         timing["report"] = time.perf_counter() - t0
         write_html_report(out / "report.html", results, figs)
     (out / "results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False, default=float),

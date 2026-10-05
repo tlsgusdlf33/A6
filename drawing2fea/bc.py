@@ -4,7 +4,7 @@ Selector grammar (used as ``"on"`` in boundary conditions and loads)::
 
     xmin | xmax | ymin | ymax | zmin | zmax   faces on the bounding-box planes
     top | bottom                              aliases of zmax / zmin
-    hole:<k> | hole:all                       side walls of hole k (extrude only)
+    hole:<k> | hole:all                       wall of hole k (extruded profiles and 3-view models)
     outer                                     side walls of outer loops (extrude only)
     x<10  y>=5  z=0  r<=12.5                  coordinate predicates (r = sqrt(x²+y²))
     box:x0,x1,y0,y1,z0,z1                     axis-aligned box (use * for unbounded)
@@ -24,6 +24,7 @@ from .drawing import Profile2D
 from .fem import Constraints, body_force_vector, face_load_vector, face_normals_areas
 from .materials import Material
 from .model3d import Mesh3D
+from .views import HoleSpec
 
 _CMP = re.compile(r"^\s*([xyzr])\s*(<=|>=|<|>|=)\s*([-+0-9.eE]+)\s*$")
 _AXIS = {"x": 0, "y": 1, "z": 2}
@@ -40,7 +41,8 @@ def _point_segment_distance(pts: np.ndarray, loop: np.ndarray) -> np.ndarray:
 
 
 class FaceSelector:
-    def __init__(self, mesh: Mesh3D, profile: Profile2D | None = None, h: float | None = None):
+    def __init__(self, mesh: Mesh3D, profile: Profile2D | None = None, h: float | None = None,
+                 holes: list | None = None):
         self.mesh = mesh
         self.profile = profile
         self.faces, self.faces_full = mesh.boundary_faces()
@@ -49,6 +51,9 @@ class FaceSelector:
         self.size = float(np.max(self.hi - self.lo))
         self.tol = 1e-6 * self.size
         self.h = h or self.size / 20
+        if holes is None and profile is not None and mesh.info.get("operation") == "extrude":
+            holes = [HoleSpec((0, 1), hl, 2, None, 1e-3 * self.h) for hl in profile.holes]
+        self.holes = holes or []
 
     # -- node predicates ---------------------------------------------------- #
     def _node_mask(self, expr: str) -> np.ndarray:
@@ -81,32 +86,37 @@ class FaceSelector:
                   [(np.inf if v in ("*", "") else float(v)) for v in vals[1::2]]
             lo, hi = np.array(lim[0]) - self.tol, np.array(lim[1]) + self.tol
             return ((x >= lo) & (x <= hi)).all(axis=1)
-        if el.startswith("hole:") or el == "outer":
+        if el == "outer":
             if self.profile is None or self.mesh.info.get("operation") != "extrude":
-                raise ValueError(f"selector '{expr}' is only available for extruded models")
-            if el == "outer":
-                loops = [r.outer for r in self.profile.regions]
-            else:
-                which = el[5:]
-                holes = self.profile.holes
-                if not holes:
-                    raise ValueError("the drawing has no holes")
-                if which == "all":
-                    loops = holes
-                else:
-                    k = int(which)
-                    if not 0 <= k < len(holes):
-                        raise ValueError(f"hole index {k} out of range (0..{len(holes) - 1})")
-                    loops = [holes[k]]
-            # Only corner/boundary nodes need testing; distance to the loop polyline.
-            cand = np.unique(self.faces)
-            mask = np.zeros(n, bool)
-            tol = 1e-3 * self.h
-            for lp in loops:
-                d = _point_segment_distance(x[cand, :2], lp)
-                mask[cand[d <= tol]] = True
-            return mask
+                raise ValueError("selector 'outer' is only available for extruded models")
+            return self._wall_mask([HoleSpec((0, 1), r.outer, 2, None, 1e-3 * self.h)
+                                    for r in self.profile.regions])
+        if el.startswith("hole:"):
+            holes = self.holes
+            if not holes:
+                raise ValueError("the model has no holes")
+            which = el[5:].strip()
+            if which == "all":
+                return self._wall_mask(holes)
+            k = int(which)
+            if not 0 <= k < len(holes):
+                raise ValueError(f"hole index {k} out of range (0..{len(holes) - 1})")
+            return self._wall_mask([holes[k]])
         raise ValueError(f"unknown selector '{expr}'")
+
+    def _wall_mask(self, specs: list) -> np.ndarray:
+        """Nodes on the side wall of a loop swept along an axis (hole walls)."""
+        x = self.mesh.nodes
+        cand = np.unique(self.faces_full)
+        mask = np.zeros(len(x), bool)
+        for sp in specs:
+            pts = x[cand][:, list(sp.axes)]
+            ok = _point_segment_distance(pts, sp.loop) <= sp.tol
+            if sp.range is not None:
+                t = x[cand, sp.axis]
+                ok &= (t >= sp.range[0] - sp.tol - self.tol) & (t <= sp.range[1] + sp.tol + self.tol)
+            mask[cand[ok]] = True
+        return mask
 
     def node_mask(self, expr: str) -> np.ndarray:
         parts = [p for p in expr.split("&")]

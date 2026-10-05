@@ -97,10 +97,58 @@ def plot_drawing(profile: Profile2D, m2: Mesh2D, path):
     plt.close(fig)
 
 
+def plot_views(tv, path):
+    """The three views in third-angle arrangement, in part coordinates, with recognised features."""
+    from .views import AXIS_NAMES, VIEW_AXES
+
+    W, D, H = tv.size
+    fig = plt.figure(figsize=(8.0, 6.4), dpi=130)
+    gs = fig.add_gridspec(2, 2, width_ratios=[W, D], height_ratios=[D, H], wspace=0.25, hspace=0.25)
+    axes = {"top": fig.add_subplot(gs[0, 0]), "front": fig.add_subplot(gs[1, 0]),
+            "side": fig.add_subplot(gs[1, 1])}
+    cuts = tv.cuts
+    for role, ax in axes.items():
+        v = tv.views[role]
+        for poly in getattr(v.silhouette, "geoms", [v.silhouette]):
+            xs, ys = poly.exterior.xy
+            ax.fill(xs, ys, color="#eef1f4", zorder=0)
+        for pl in v.visible:
+            ax.plot(pl[:, 0], pl[:, 1], color=INK, lw=1.1)
+        for pl in v.hidden:
+            ax.plot(pl[:, 0], pl[:, 1], color=MUTED, lw=0.9, ls=(0, (4, 2)))
+        for f in tv.features:
+            if f.view != role:
+                continue
+            c = f.polygon.centroid
+            if f.kind == "cut":
+                label, color = f"hole:{cuts.index(f)}", "#0969da"
+            elif f.kind == "boss":
+                label, color = "boss", "#1a7f37"
+            else:
+                label, color = "ignored", "#cf222e"
+            xs, ys = f.polygon.exterior.xy
+            ax.plot(xs, ys, color=color, lw=1.6)
+            ax.annotate(label, (c.x, c.y), ha="center", va="center", fontsize=7, color=color,
+                        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.8))
+        a, b = VIEW_AXES[role]
+        ax.set_aspect("equal")
+        ax.set_title(f"{role.upper()} view ({AXIS_NAMES[a]}-{AXIS_NAMES[b]})", color=INK, fontsize=9, loc="left")
+        ax.tick_params(colors=MUTED, labelsize=7)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+    fig.suptitle(f"Three-view drawing ({tv.projection}-angle projection) → part coordinates",
+                 color=INK, fontsize=11, x=0.02, ha="left")
+    fig.savefig(path, bbox_inches="tight", pad_inches=0.15)
+    plt.close(fig)
+
+
 def make_figures(out: Path, profile, m2, mesh, results, fields) -> dict[str, str]:
     figs = {}
     figs["drawing"] = out / "fig_drawing.png"
-    plot_drawing(profile, m2, figs["drawing"])
+    if m2 is None:  # three-view drawing
+        plot_views(profile, figs["drawing"])
+    else:
+        plot_drawing(profile, m2, figs["drawing"])
     figs["model"] = out / "fig_model.png"
     _surface_plot(mesh, figs["model"], "3D model")
     size = float(np.ptp(mesh.nodes, axis=0).max())
@@ -171,18 +219,35 @@ def write_html_report(path: Path, results: dict, figs: dict[str, str]) -> None:
         verdict = (f'<div class="tiles"><div class="tile"><span>1st natural frequency</span>'
                    f'<b>{md["frequencies_Hz"][0]:.4g} Hz</b></div></div>')
 
-    sections.append("<h2>1. Drawing → profile</h2>" + _table([
-        ("Source", r["drawing"]["source"]),
-        ("Regions / holes", f'{r["drawing"]["regions"]} / {r["drawing"]["holes"]}'),
-        ("Profile area", f'{r["drawing"]["area_mm2"]:.6g} mm²'),
-        ("Bounding box", f'{_fmt(r["drawing"]["bbox_min"])} – {_fmt(r["drawing"]["bbox_max"])} mm'),
-        ("Annotations", "; ".join(f"{k}={v}" for k, v in r["drawing"]["annotations"].items()) or "—"),
-    ]) + _img(figs["drawing"]))
+    dr = r["drawing"]
+    ann = "; ".join(f"{k}={v}" for k, v in dr["annotations"].items()) or "—"
+    if dr.get("mode") == "three_views":
+        rows = [
+            ("Source", dr["source"]),
+            ("Views", f'front / top / side, {dr["projection"]}-angle projection, side view {dr["side_view"]}'),
+            ("Part size (W × D × H)", " × ".join(f"{v:.4g}" for v in dr["size_mm"]) + " mm"),
+        ]
+        rows += [("Feature", f) for f in dr["features"]] or [("Features", "—")]
+        rows.append(("Annotations", ann))
+        sections.append("<h2>1. Three-view drawing → features</h2>" + _table(rows) + _img(figs["drawing"]))
+    else:
+        sections.append("<h2>1. Drawing → profile</h2>" + _table([
+            ("Source", dr["source"]),
+            ("Regions / holes", f'{dr["regions"]} / {dr["holes"]}'),
+            ("Profile area", f'{dr["area_mm2"]:.6g} mm²'),
+            ("Bounding box", f'{_fmt(dr["bbox_min"])} – {_fmt(dr["bbox_max"])} mm'),
+            ("Annotations", ann),
+        ]) + _img(figs["drawing"]))
 
     mdl = r["model"]
     op = mdl["operation"]
-    op_desc = (f'extrude, thickness {mdl["thickness"]:g} mm' if op == "extrude"
-               else f'revolve {mdl["angle"]:g}° about x = {mdl["axis_x"]:g}')
+    if op == "extrude":
+        op_desc = f'extrude, thickness {mdl["thickness"]:g} mm'
+    elif op == "views":
+        op_desc = (f'reconstructed from 3 views: outline prisms intersected, features applied; '
+                   f'{mdl["slabs"]} slabs along {mdl["slab_axis"]}')
+    else:
+        op_desc = f'revolve {mdl["angle"]:g}° about x = {mdl["axis_x"]:g}'
     mp = r["mass_properties"]
     sections.append("<h2>2. 3D model</h2>" + _table([
         ("Operation", op_desc),

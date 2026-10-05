@@ -1,6 +1,7 @@
 """Command line interface.
 
     python -m drawing2fea run drawing.dxf [-c job.json] [-o results/] [--thickness 10] ...
+    python -m drawing2fea run three_views.dxf          (front/top/side drawing -> 3D, auto-detected)
     python -m drawing2fea examples [dir]
     python -m drawing2fea materials
 """
@@ -48,6 +49,13 @@ def _overrides(args) -> dict:
         o.setdefault("analysis", {})["static"] = False
     if args.solver:
         o["solver"] = args.solver
+    if args.views:
+        o.setdefault("model", {})["operation"] = "views"
+    for key, val in (("projection", args.projection), ("axis", args.slab_axis)):
+        if val:
+            o.setdefault("views", {})[key] = val
+    if args.assume_through:
+        o.setdefault("views", {})["assume_through"] = True
     if args.layers:
         o["drawing_layers"] = args.layers
     return o
@@ -65,6 +73,13 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--thickness", type=float, help="extrude depth [mm]")
     r.add_argument("--revolve", type=float, metavar="DEG", help="revolve angle [deg] about x = axis_x")
     r.add_argument("--axis-x", type=float)
+    r.add_argument("--views", action="store_true",
+                   help="drawing is a front/top/side three-view drawing (auto-detected by default)")
+    r.add_argument("--projection", choices=["third", "first"],
+                   help="three-view projection convention (default: from layout, top above front = third)")
+    r.add_argument("--slab-axis", choices=["x", "y", "z"], help="three-view meshing axis (default: automatic)")
+    r.add_argument("--assume-through", action="store_true",
+                   help="three-view: treat inner loops without hidden-line evidence as through holes")
     r.add_argument("--material", help=f"one of {', '.join(MATERIALS)}")
     r.add_argument("--mesh-size", type=float, help="target element size [mm]")
     r.add_argument("--order", type=int, choices=[1, 2], help="element order (2 = tet10, default)")

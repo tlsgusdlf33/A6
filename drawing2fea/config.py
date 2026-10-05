@@ -16,6 +16,8 @@ DEFAULTS: dict = {
     "solver": "auto",
     "output": {"stl": True, "vtk": True, "report": True},
     "layers": None,
+    # three-view (front/top/side) reconstruction
+    "views": {"projection": None, "axis": None, "assume_through": False},
 }
 
 
@@ -40,6 +42,8 @@ def config_from_annotations(ann: dict[str, str]) -> dict:
 
         THICKNESS / THK = 10           extrude depth [mm]
         REVOLVE / ANGLE = 360          revolve about x = AXIS_X
+        VIEWS = 3                      drawing is a front/top/side three-view drawing
+        PROJECTION = THIRD | FIRST     projection convention of the three views
         AXIS_X = 0
         MATERIAL / MAT = AL6061
         MESH / MESH_SIZE = 2.5         target element size [mm]
@@ -69,6 +73,10 @@ def config_from_annotations(ann: dict[str, str]) -> dict:
     if rev:
         put(["model", "operation"], "revolve")
         put(["model", "angle"], float(rev.split(";")[0]))
+    if a.get("VIEWS") or "PROJECTION" in a or "투상법" in a:
+        put(["model", "operation"], "views")
+    if "PROJECTION" in a or "투상법" in a:
+        put(["views", "projection"], a.get("PROJECTION", a.get("투상법")).strip())
     if "AXIS_X" in a:
         put(["model", "axis_x"], float(a["AXIS_X"]))
     mat = a.get("MATERIAL", a.get("MAT"))

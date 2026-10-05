@@ -3,6 +3,7 @@
 Pipeline::
 
     2D drawing  ->  closed profile loops  ->  3D solid (extrude / revolve)
+    3-view drawing (front/top/side)       ->  3D solid (view intersection + features)
                 ->  tetrahedral mesh (tet4 / tet10)  ->  static + modal FEA
                 ->  STL / VTK / JSON / HTML report
 
@@ -14,6 +15,7 @@ __version__ = "0.1.0"
 from .drawing import Profile2D, Region, load_drawing
 from .materials import Material, get_material, MATERIALS
 from .pipeline import run_pipeline
+from .views import ThreeViewDrawing, load_three_views
 
 __all__ = [
     "Profile2D",
@@ -23,4 +25,6 @@ __all__ = [
     "get_material",
     "MATERIALS",
     "run_pipeline",
+    "ThreeViewDrawing",
+    "load_three_views",
 ]

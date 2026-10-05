@@ -85,6 +85,65 @@ def make_cantilever_json(path: str | Path) -> Path:
     return path
 
 
+def make_angle_bracket_3view_dxf(path: str | Path) -> Path:
+    """Three-view drawing (third-angle: top view above, right side view to the right).
+
+    Part: base plate 120 x 60 x 15 with two vertical bolt holes and a 15 mm
+    thick upright wall at the back carrying a horizontal Ø20 hole.
+    Hidden edges are drawn with the HIDDEN linetype.
+    """
+    import ezdxf
+
+    doc = ezdxf.new("R2010", setup=True)
+    msp = doc.modelspace()
+    doc.layers.add("OUTLINE", color=7)
+    doc.layers.add("HIDDEN", color=2, linetype="HIDDEN")
+    doc.layers.add("CENTER", color=1, linetype="CENTER")
+    doc.layers.add("NOTES", color=3)
+    vis = {"layer": "OUTLINE"}
+    hid = {"layer": "HIDDEN"}
+
+    def poly(pts, off, attrs=vis, close=True):
+        pts = [(x + off[0], y + off[1]) for x, y in pts]
+        msp.add_lwpolyline(pts, close=close, dxfattribs=attrs)
+
+    def line(a, b, off, attrs=vis):
+        msp.add_line((a[0] + off[0], a[1] + off[1]), (b[0] + off[0], b[1] + off[1]), dxfattribs=attrs)
+
+    # FRONT view (x, z) at the origin
+    F = (0, 0)
+    poly([(0, 0), (120, 0), (120, 70), (0, 70)], F)
+    line((0, 15), (120, 15), F)
+    msp.add_circle((60, 45), 10, dxfattribs=vis)
+    for x in (14, 26, 94, 106):
+        line((x, 0), (x, 15), F, hid)
+    line((45, 45), (75, 45), F, {"layer": "CENTER"})
+
+    # TOP view (x, y) above the front view
+    T = (0, 100)
+    poly([(0, 0), (120, 0), (120, 60), (0, 60)], T)
+    line((0, 45), (120, 45), T)
+    for cx in (20, 100):
+        msp.add_circle((cx + T[0], 22 + T[1]), 6, dxfattribs=vis)
+    for x in (50, 70):
+        line((x, 45), (x, 60), T, hid)
+
+    # RIGHT SIDE view (y, z) to the right of the front view, front face on the left
+    S = (150, 0)
+    poly([(0, 0), (60, 0), (60, 70), (45, 70), (45, 15), (0, 15)], S)
+    for y in (16, 28):
+        line((y, 0), (y, 15), S, hid)
+    for z in (35, 55):
+        line((45, z), (60, z), S, hid)
+
+    notes = ["MATERIAL=STEEL", "MESH=5", "FIX=hole:0;hole:1", "FORCE=hole:2:0,0,-5000", "MODES=4"]
+    for k, t in enumerate(notes):
+        msp.add_text(t, height=3.0, dxfattribs={"layer": "NOTES"}).set_placement((150, 150 - 6 * k))
+    path = Path(path)
+    doc.saveas(path)
+    return path
+
+
 def make_all(directory: str | Path) -> list[Path]:
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
@@ -92,6 +151,7 @@ def make_all(directory: str | Path) -> list[Path]:
         make_bracket_dxf(d / "bracket.dxf"),
         make_flange_dxf(d / "flange.dxf"),
         make_cantilever_json(d / "cantilever.json"),
+        make_angle_bracket_3view_dxf(d / "angle_bracket_3view.dxf"),
     ]
 
 
