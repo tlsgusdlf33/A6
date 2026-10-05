@@ -4,6 +4,8 @@
     python -m drawing2fea run three_views.dxf          (front/top/side drawing -> 3D, auto-detected)
     python -m drawing2fea examples [dir]
     python -m drawing2fea materials
+    python -m drawing2fea gui                       (desktop app with drag & drop)
+    python -m drawing2fea shortcut                  (create a desktop icon)
 """
 
 from __future__ import annotations
@@ -97,12 +99,32 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("examples", help="write example drawings")
     e.add_argument("dir", nargs="?", default="examples")
     sub.add_parser("materials", help="list the material library")
+    g = sub.add_parser("gui", help="open the desktop app (drag & drop)")
+    g.add_argument("--port", type=int, default=0)
+    g.add_argument("--no-window", action="store_true")
+    s = sub.add_parser("shortcut", help="create a desktop icon that starts the app")
+    s.add_argument("--dir", help="folder for the icon (default: desktop and start menu)")
 
     args = ap.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):  # e.g. cp949 consoles cannot print σ or ³
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     if args.cmd == "materials":
         print(f"{'name':10s} {'E [MPa]':>10s} {'nu':>6s} {'rho [t/mm3]':>12s} {'Sy [MPa]':>9s}")
         for m in MATERIALS.values():
             print(f"{m.name:10s} {m.E:10.0f} {m.nu:6.3f} {m.rho:12.3e} {m.yield_strength:9.0f}")
+        return 0
+    if args.cmd == "gui":
+        from .gui import main as gui_main
+
+        return gui_main((["--port", str(args.port)] if args.port else []) + (["--no-window"] if args.no_window else []))
+    if args.cmd == "shortcut":
+        from pathlib import Path
+
+        from .gui.shortcut import create_shortcut
+
+        for p in create_shortcut(Path(args.dir) if args.dir else None):
+            print(f"created {p}")
         return 0
     if args.cmd == "examples":
         from .examples import make_all

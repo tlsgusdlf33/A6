@@ -140,12 +140,14 @@ def _default_bcs(cfg: dict, warnings: list[str]) -> None:
 
 def run_pipeline(drawing_path: str | Path, out_dir: str | Path = "results",
                  config: str | Path | dict | None = None, overrides: dict | None = None,
-                 verbose: bool = True) -> dict:
+                 verbose: bool = True, log=None) -> dict:
     """Run the full automation and return the results dictionary.
 
     ``config`` may be a path to a JSON/YAML job file or an already-loaded dict.
+    ``log`` receives the progress lines (default: ``print`` when ``verbose``).
     """
-    log = print if verbose else (lambda *a, **k: None)
+    if log is None:
+        log = print if verbose else (lambda *a, **k: None)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     timing: dict[str, float] = {}

@@ -202,7 +202,7 @@ def test_pipeline_end_to_end(tmp_path):
     for name in ("results.json", "report.html", "model.stl", "results.vtk", "fig_von_mises.png"):
         assert (out / name).exists(), name
     assert read_stl_triangle_count(out / "model.stl") > 0
-    saved = json.loads((out / "results.json").read_text())
+    saved = json.loads((out / "results.json").read_text(encoding="utf-8"))
     assert saved["static"]["max_displacement_mm"] == pytest.approx(res["static"]["max_displacement_mm"])
     # 200 x 20 x 10 steel cantilever, 500 N tip load: EB deflection 0.952 mm (+ shear)
     assert res["static"]["max_displacement_mm"] == pytest.approx(0.952, rel=0.03)

@@ -122,6 +122,22 @@ class Feature:
         return (f"{what} from {self.view} view at {AXIS_NAMES[a]}={c.x:.4g}, {AXIS_NAMES[b]}={c.y:.4g}, "
                 f"{AXIS_NAMES[self.axis]} {lo:.4g}..{hi:.4g} ({self.evidence})")
 
+    def describe_ko(self) -> str:
+        c = self.polygon.centroid
+        a, b = self.axes
+        lo, hi = self.range
+        view = {"top": "평면도", "front": "정면도", "side": "측면도"}[self.view]
+        what = {"cut": "관통 구멍" if self.through else "막힌 구멍/포켓", "boss": "보스(돌출부)",
+                "ignored": "무시된 루프"}[self.kind]
+        ev = self.evidence
+        for en, ko in (("hidden lines in ", "숨은선: "), ("visible lines in ", "실선: "),
+                       (" view", ""), ("front", "정면도"), ("top", "평면도"), ("side", "측면도"),
+                       ("no matching lines in the other views", "다른 뷰에 대응선 없음"),
+                       ("no hidden lines: assumed through", "숨은선 없음 → 관통 가정")):
+            ev = ev.replace(en, ko)
+        return (f"{what} — {view} {AXIS_NAMES[a]}={c.x:.4g}, {AXIS_NAMES[b]}={c.y:.4g}, "
+                f"{AXIS_NAMES[self.axis]} {lo:.4g}~{hi:.4g} mm ({ev})")
+
 
 @dataclass
 class ThreeViewDrawing:

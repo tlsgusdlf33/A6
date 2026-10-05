@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drawing2FEA</title>
+<link rel="icon" href="/assets/icon.png">
+<style>
+:root {
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1f2328; --muted:#656d76; --line:#d8dee4; --soft:#eef1f4;
+  --accent:#1f6feb; --accent-ink:#ffffff; --accent-soft:#ddeaff; --ok:#1a7f37; --warn:#9a6700; --bad:#cf222e;
+  --drop:#f0f6ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#8d96a0; --line:#30363d; --soft:#1f252d;
+          --accent:#4493f8; --accent-ink:#0d1117; --accent-soft:#132d50; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+          --drop:#10233f; }
+  .preview img { background:#fff; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink);
+       font:14px/1.5 system-ui,-apple-system,"Segoe UI","Malgun Gothic","Noto Sans KR",sans-serif; }
+header { display:flex; align-items:center; gap:12px; padding:14px 24px; background:var(--panel);
+         border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+header img { width:34px; height:34px; }
+header h1 { font-size:18px; margin:0; }
+header .sub { color:var(--muted); font-size:13px; }
+header .spacer { flex:1; }
+main { max-width:1180px; margin:0 auto; padding:20px 16px 60px; display:grid; gap:16px; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px; }
+.card h2 { font-size:16px; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+.num { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%;
+       background:var(--accent); color:var(--accent-ink); font-size:12px; font-weight:700; }
+.drop { border:2px dashed var(--line); border-radius:10px; padding:34px 16px; text-align:center;
+        background:var(--soft); transition:background .15s,border-color .15s; cursor:pointer; }
+.drop.compact { padding:14px 16px; display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; }
+.drop.compact .big { font-size:14px; margin:0; } .drop.compact svg { width:26px; height:26px; }
+.drop.compact .hint { display:none; } .drop.compact div[style] { margin:0 !important; }
+.drop.over, body.dragging .drop { border-color:var(--accent); background:var(--drop); }
+.drop .big { font-size:17px; font-weight:600; margin:6px 0 4px; }
+.drop .hint { color:var(--muted); font-size:13px; }
+.drop svg { width:44px; height:44px; color:var(--accent); }
+.row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+button, .btn { font:inherit; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+               padding:7px 14px; border-radius:7px; cursor:pointer; text-decoration:none; display:inline-flex;
+               align-items:center; gap:6px; }
+button:hover, .btn:hover { border-color:var(--accent); }
+button.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+button.primary.large { font-size:16px; padding:11px 26px; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+select, input[type=text], input[type=number] { font:inherit; color:var(--ink); background:var(--panel);
+       border:1px solid var(--line); border-radius:6px; padding:6px 8px; min-width:0; }
+input:focus, select:focus, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.filebar { display:flex; align-items:center; gap:10px; margin-top:12px; color:var(--muted); }
+.filebar b { color:var(--ink); }
+.grid2 { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:18px; }
+@media (max-width:900px) { .grid2 { grid-template-columns:1fr; } }
+.preview img { width:100%; border:1px solid var(--line); border-radius:8px; }
+.kv { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+.kv td { border-bottom:1px solid var(--line); padding:5px 6px; vertical-align:top; }
+.kv td:first-child { color:var(--muted); width:110px; white-space:nowrap; }
+fieldset { border:1px solid var(--line); border-radius:8px; padding:10px 12px 12px; margin:0 0 12px; }
+legend { color:var(--muted); font-size:12px; padding:0 4px; }
+label.f { display:grid; grid-template-columns:110px minmax(0,1fr); align-items:center; gap:8px; margin:6px 0; }
+label.f > span { color:var(--muted); font-size:13px; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.chip { font-size:12px; padding:2px 9px; border-radius:999px; border:1px solid var(--line); background:var(--soft);
+        cursor:pointer; color:var(--ink); }
+.chip:hover { border-color:var(--accent); }
+.chip.hole { background:var(--accent-soft); }
+.loadrow { display:grid; grid-template-columns:96px minmax(0,1fr) minmax(0,1.1fr) 30px; gap:6px; margin-bottom:6px; }
+.loadrow button { padding:4px; justify-content:center; }
+.note { font-size:12px; color:var(--muted); margin-top:4px; }
+.msg { border-radius:8px; padding:9px 12px; margin:8px 0; font-size:13px; }
+.msg.warn { background:color-mix(in srgb, var(--warn) 14%, transparent); color:var(--ink); }
+.msg.err { background:color-mix(in srgb, var(--bad) 14%, transparent); color:var(--ink); }
+.steps { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin:14px 0 8px; }
+.step { font-size:12px; color:var(--muted); border-top:4px solid var(--line); padding-top:6px; }
+.step.done { color:var(--ink); border-color:var(--ok); }
+.step.active { color:var(--ink); border-color:var(--accent); font-weight:600; }
+pre.log { background:var(--soft); border-radius:8px; padding:10px 12px; max-height:180px; overflow:auto;
+          font:12px/1.5 ui-monospace,Consolas,monospace; margin:8px 0 0; white-space:pre-wrap; }
+.tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:6px 0 14px; }
+.tile { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:var(--soft); }
+.tile span { display:block; font-size:12px; color:var(--muted); }
+.tile b { font-size:20px; font-variant-numeric:tabular-nums; }
+.tile.ok b { color:var(--ok); } .tile.warn b { color:var(--warn); } .tile.bad b { color:var(--bad); }
+iframe { width:100%; height:900px; border:1px solid var(--line); border-radius:8px; background:#fff; margin-top:12px; }
+.hidden { display:none !important; }
+.overlay { position:fixed; inset:0; background:color-mix(in srgb, var(--accent) 18%, transparent);
+           border:4px dashed var(--accent); display:none; place-items:center; z-index:20; pointer-events:none;
+           font-size:22px; font-weight:700; color:var(--ink); }
+body.dragging .overlay { display:grid; }
+.spinner { width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%;
+           animation:spin 0.8s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+footer { color:var(--muted); font-size:12px; text-align:center; padding:8px; }
+</style>
+</head>
+<body>
+<div class="overlay">도면 파일을 놓으세요</div>
+<header>
+  <img src="/assets/icon.png" alt="">
+  <div>
+    <h1>Drawing2FEA</h1>
+    <div class="sub">2D 도면 → 3D 모델링 → 구조해석 자동 수행</div>
+  </div>
+  <div class="spacer"></div>
+  <button type="button" id="mk-shortcut" title="바탕화면에 실행 아이콘을 만듭니다">🖥 바탕화면 아이콘 만들기</button>
+  <select id="example" title="예제 도면 불러오기" aria-label="예제 도면 불러오기">
+    <option value="">예제 불러오기…</option>
+  </select>
+</header>
+
+<main>
+  <!-- 1. file -->
+  <section class="card" id="card-file">
+    <h2><span class="num">1</span> 도면 첨부</h2>
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="도면 파일 첨부">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>
+        <path d="M12 17v-6"/><path d="m9.5 13.5 2.5-2.5 2.5 2.5"/>
+      </svg>
+      <div class="big">도면 파일을 여기로 끌어다 놓으세요</div>
+      <div class="hint">또는</div>
+      <div style="margin-top:8px"><button class="primary" id="pick" type="button">📎 파일 첨부</button></div>
+      <div class="hint" style="margin-top:10px">DXF(.dxf) · JSON(.json) · DWG는 ODA File Converter 설치 시 · 3면도(정면도/평면도/측면도) 또는 단일 윤곽 도면</div>
+    </div>
+    <input type="file" id="file" accept=".dxf,.json,.dwg" class="hidden">
+    <div class="filebar hidden" id="filebar"></div>
+    <div id="upload-msg"></div>
+  </section>
+
+  <!-- 2. recognition + options -->
+  <section class="card hidden" id="card-setup">
+    <h2><span class="num">2</span> 도면 인식 결과와 해석 조건</h2>
+    <div class="grid2">
+      <div class="preview">
+        <img id="preview-img" alt="도면 인식 결과">
+        <table class="kv" id="preview-kv"></table>
+        <div id="preview-msg"></div>
+      </div>
+      <form id="form" autocomplete="off" onsubmit="return false">
+        <fieldset>
+          <legend>3D 모델링</legend>
+          <label class="f"><span>방식</span>
+            <select id="operation">
+              <option value="auto">자동 (도면에서 판별)</option>
+              <option value="views">3면도 → 3D 복원</option>
+              <option value="extrude">돌출 (두께 지정)</option>
+              <option value="revolve">회전체 (각도 지정)</option>
+            </select></label>
+          <label class="f op-extrude hidden"><span>두께 [mm]</span><input type="number" id="thickness" min="0" step="any"></label>
+          <label class="f op-revolve hidden"><span>회전 각도 [°]</span><input type="number" id="angle" value="360" step="any"></label>
+          <label class="f op-views"><span>투상법</span>
+            <select id="projection">
+              <option value="auto">자동 (배치로 판별)</option>
+              <option value="third">제3각법 (KS)</option>
+              <option value="first">제1각법</option>
+            </select></label>
+          <label class="f op-views" style="grid-template-columns:auto 1fr"><input type="checkbox" id="assume_through">
+            <span>숨은선이 없는 내부 원은 관통 구멍으로 처리</span></label>
+        </fieldset>
+        <fieldset>
+          <legend>재료 · 메쉬</legend>
+          <label class="f"><span>재료</span><select id="material"></select></label>
+          <label class="f"><span>요소 크기 [mm]</span><input type="number" id="mesh_size" min="0" step="any" placeholder="자동"></label>
+          <label class="f"><span>요소 차수</span>
+            <select id="order"><option value="2">2차 (정확, 권장)</option><option value="1">1차 (빠름)</option></select></label>
+        </fieldset>
+        <fieldset>
+          <legend>경계조건 (고정)</legend>
+          <label class="f"><span>고정 위치</span><input type="text" id="fixes" placeholder="예: hole:0; hole:1  또는  zmin"></label>
+          <div class="chips" id="fix-chips"></div>
+          <div class="note">구멍 번호는 왼쪽 그림에 표시됩니다. 여러 곳은 ; 로 구분. 비워 두면 도면 주석 또는 바닥면 고정.</div>
+        </fieldset>
+        <fieldset>
+          <legend>하중</legend>
+          <div id="loads"></div>
+          <div class="row">
+            <button type="button" id="add-load">+ 하중 추가</button>
+          </div>
+          <div class="note">힘: 전체 하중 [N] x,y,z (예: 0,0,-5000) · 압력 [MPa] · 중력 [mm/s²]. 비워 두면 도면 주석 또는 자중.</div>
+          <datalist id="selectors"></datalist>
+        </fieldset>
+        <fieldset>
+          <legend>해석</legend>
+          <label class="f" style="grid-template-columns:auto 1fr"><input type="checkbox" id="static" checked><span>정적 해석 (응력·변위·안전율)</span></label>
+          <label class="f"><span>고유진동수 개수</span><input type="number" id="modes" min="0" max="20" placeholder="도면 주석 또는 6"></label>
+        </fieldset>
+      </form>
+    </div>
+    <div class="row" style="justify-content:flex-end; margin-top:6px">
+      <button class="primary large" id="run" type="button">▶ 3D 모델링 + 해석 실행</button>
+    </div>
+  </section>
+
+  <!-- 3. progress + results -->
+  <section class="card hidden" id="card-run">
+    <h2><span class="num">3</span> 실행 결과 <span id="run-spin" class="spinner hidden"></span></h2>
+    <div class="steps" id="steps">
+      <div class="step">도면 해석</div><div class="step">3D 모델링·메쉬</div><div class="step">정적 해석</div>
+      <div class="step">고유진동수</div><div class="step">보고서</div>
+    </div>
+    <div id="run-msg"></div>
+    <div id="results" class="hidden">
+      <div class="tiles" id="tiles"></div>
+      <div class="row" id="actions"></div>
+      <div id="warn-list"></div>
+      <iframe id="report" title="해석 보고서"></iframe>
+    </div>
+    <details><summary class="note" style="cursor:pointer">실행 로그</summary><pre class="log" id="log"></pre></details>
+  </section>
+</main>
+<footer id="footer"></footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let job = null, info = null, pollTimer = null;
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function msg(el, text, kind) { $(el).innerHTML = text ? `<div class="msg ${kind||"warn"}">${esc(text)}</div>` : ""; }
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({ error: "응답을 읽을 수 없습니다" }));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+// ---------------------------------------------------------------- startup
+(async () => {
+  info = await api("/api/info");
+  $("footer").textContent = `Drawing2FEA ${info.version} · 결과 저장 폴더: ${info.workdir}`;
+  const mat = $("material");
+  mat.innerHTML = `<option value="">도면 지정 / 기본 (STEEL)</option>` + info.materials.map(m =>
+    `<option value="${esc(m.name)}">${esc(m.name)} — E ${m.E.toLocaleString()} MPa, σy ${m.yield_strength} MPa</option>`).join("");
+  $("example").innerHTML += info.examples.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join("");
+})().catch(e => msg("upload-msg", "서버에 연결할 수 없습니다: " + e.message, "err"));
+setInterval(() => fetch("/api/heartbeat", { method: "POST" }).catch(() => {}), 20000);
+fetch("/api/heartbeat", { method: "POST" }).catch(() => {});
+
+// ---------------------------------------------------------------- file input + drag & drop
+$("pick").addEventListener("click", (e) => { e.stopPropagation(); $("file").click(); });
+$("drop").addEventListener("click", () => $("file").click());
+$("drop").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+$("file").addEventListener("change", () => { if ($("file").files[0]) upload($("file").files[0]); $("file").value = ""; });
+
+let dragDepth = 0;
+window.addEventListener("dragenter", (e) => { if (hasFiles(e)) { dragDepth++; document.body.classList.add("dragging"); e.preventDefault(); } });
+window.addEventListener("dragover", (e) => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove("dragging"); });
+window.addEventListener("drop", (e) => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) upload(f);
+});
+function hasFiles(e) { return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files"); }
+
+$("mk-shortcut").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/shortcut", { method: "POST" });
+    alert("바탕화면 아이콘을 만들었습니다.\n다음부터는 아이콘을 더블 클릭해 실행하세요.\n\n" + r.created.join("\n"));
+  } catch (e) { alert("아이콘을 만들지 못했습니다: " + e.message); }
+});
+
+$("example").addEventListener("change", async () => {
+  const name = $("example").value; $("example").value = "";
+  if (!name) return;
+  busyUpload(name);
+  try { showJob(await api("/api/example/" + encodeURIComponent(name), { method: "POST" })); }
+  catch (e) { msg("upload-msg", e.message, "err"); $("filebar").classList.add("hidden"); }
+});
+
+function busyUpload(name) {
+  msg("upload-msg", "");
+  $("filebar").classList.remove("hidden");
+  $("filebar").innerHTML = `<span class="spinner"></span> <b>${esc(name)}</b> 도면을 인식하는 중…`;
+}
+
+async function upload(file) {
+  if (!/\.(dxf|json|dwg)$/i.test(file.name)) { msg("upload-msg", "DXF(.dxf) 또는 JSON 도면 파일만 첨부할 수 있습니다.", "err"); return; }
+  busyUpload(file.name);
+  try {
+    showJob(await api("/api/upload?name=" + encodeURIComponent(file.name), { method: "POST", body: file }));
+  } catch (e) { msg("upload-msg", e.message, "err"); $("filebar").classList.add("hidden"); }
+}
+
+// ---------------------------------------------------------------- recognition + form
+function showJob(j) {
+  job = j;
+  const p = j.preview || {};
+  $("filebar").innerHTML = `📄 <b>${esc(j.name)}</b> · ${p.mode === "views" ? "3면도" : p.mode === "profile" ? "단일 윤곽 도면" : "인식 실패"}
+     <button type="button" id="change">다른 파일</button>`;
+  $("change").onclick = () => $("file").click();
+  $("card-setup").classList.remove("hidden");
+  $("card-run").classList.add("hidden");
+  $("drop").classList.add("compact");
+  $("drop").querySelector(".big").textContent = "다른 도면을 끌어다 놓거나";
+  const img = $("preview-img");
+  if (p.image) { img.src = p.image + "?t=" + Date.now(); img.classList.remove("hidden"); } else img.classList.add("hidden");
+
+  const rows = [];
+  if (p.mode === "views") {
+    rows.push(["형식", `3면도 · ${p.projection === "third" ? "제3각법" : "제1각법"}`]);
+    rows.push(["부품 크기", p.size.join(" × ") + " mm (폭 × 깊이 × 높이)"]);
+    (p.features || []).forEach((f, i) => rows.push([i ? "" : "인식된 특징", f]));
+  } else if (p.mode === "profile") {
+    rows.push(["형식", `단일 윤곽 · 영역 ${p.regions}개 · 구멍 ${p.holes.length}개`]);
+    rows.push(["크기", p.size.join(" × ") + " mm"]);
+  }
+  const ann = p.annotations || {};
+  if (Object.keys(ann).length) rows.push(["도면 주석", Object.entries(ann).map(([k, v]) => `${k}=${v}`).join("; ")]);
+  $("preview-kv").innerHTML = rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+  $("preview-msg").innerHTML = "";
+  if (!p.ok && p.error) msg("preview-msg", "도면 인식 오류: " + p.error, "err");
+  (p.warnings || []).forEach(w => $("preview-msg").innerHTML += `<div class="msg warn">${esc(w)}</div>`);
+
+  // defaults from the drawing
+  $("operation").value = p.mode === "views" ? "views" : (p.operation === "revolve" ? "revolve" : p.operation === "extrude" ? "extrude" : (p.mode === "profile" ? "extrude" : "auto"));
+  $("thickness").value = ann.THICKNESS || ann.THK || "";
+  $("thickness").placeholder = "예: 10";
+  $("material").value = "";
+  if (ann.MATERIAL || ann.MAT) $("material").options[0].textContent = `도면 지정 (${ann.MATERIAL || ann.MAT})`;
+  else $("material").options[0].textContent = "도면 지정 / 기본 (STEEL)";
+  $("fixes").value = ""; $("fixes").placeholder = ann.FIX ? `도면 지정: ${ann.FIX}` : "예: hole:0; hole:1  또는  zmin";
+  $("mesh_size").placeholder = ann.MESH ? `도면 지정: ${ann.MESH}` : "자동";
+  $("modes").placeholder = ann.MODES ? `도면 지정: ${ann.MODES}` : "6";
+  $("loads").innerHTML = "";
+  if (!ann.FORCE && !ann.PRESSURE && !ann.GRAVITY) addLoad();
+  else $("loads").innerHTML = `<div class="note" id="load-ann">도면 주석의 하중 사용: ${esc([ann.FORCE && "FORCE=" + ann.FORCE, ann.PRESSURE && "PRESSURE=" + ann.PRESSURE, ann.GRAVITY && "GRAVITY=" + ann.GRAVITY].filter(Boolean).join("; "))}</div>`;
+
+  const holes = p.holes || [];
+  const faces = ["xmin", "xmax", "ymin", "ymax", "zmin", "zmax"];
+  const faceName = { xmin: "왼쪽면", xmax: "오른쪽면", ymin: "앞면", ymax: "뒷면", zmin: "바닥", zmax: "윗면" };
+  $("fix-chips").innerHTML = holes.map(h => `<span class="chip hole" data-v="${h}">${h}</span>`).join("") +
+    faces.map(f => `<span class="chip" data-v="${f}" title="${faceName[f]}">${f} · ${faceName[f]}</span>`).join("");
+  $("fix-chips").querySelectorAll(".chip").forEach(c => c.onclick = () => {
+    const cur = $("fixes").value.split(";").map(s => s.trim()).filter(Boolean);
+    if (!cur.includes(c.dataset.v)) cur.push(c.dataset.v);
+    $("fixes").value = cur.join("; ");
+  });
+  $("selectors").innerHTML = [...holes, ...faces].map(v => `<option value="${v}">`).join("");
+  syncOperation();
+  $("card-setup").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function syncOperation() {
+  const op = $("operation").value;
+  document.querySelectorAll(".op-extrude").forEach(e => e.classList.toggle("hidden", op !== "extrude"));
+  document.querySelectorAll(".op-revolve").forEach(e => e.classList.toggle("hidden", op !== "revolve"));
+  document.querySelectorAll(".op-views").forEach(e => e.classList.toggle("hidden", !(op === "views" || op === "auto")));
+}
+$("operation").addEventListener("change", syncOperation);
+
+function addLoad(type = "force", on = "", value = "") {
+  const note = $("load-ann"); if (note) note.remove();
+  const row = document.createElement("div");
+  row.className = "loadrow";
+  row.innerHTML = `<select aria-label="하중 종류"><option value="force">힘 [N]</option><option value="pressure">압력 [MPa]</option><option value="gravity">중력</option></select>
+    <input type="text" list="selectors" placeholder="위치 예: hole:2" aria-label="하중 위치">
+    <input type="text" placeholder="0,0,-1000" aria-label="하중 값">
+    <button type="button" title="삭제" aria-label="하중 삭제">✕</button>`;
+  const [sel, where, val, del] = row.children;
+  sel.value = type; where.value = on; val.value = value;
+  const sync = () => {
+    where.disabled = sel.value === "gravity";
+    val.placeholder = sel.value === "force" ? "Fx,Fy,Fz 예: 0,0,-1000" : sel.value === "pressure" ? "예: 2.5" : "0,0,-9810";
+  };
+  sel.onchange = sync; sync();
+  del.onclick = () => row.remove();
+  $("loads").appendChild(row);
+}
+$("add-load").addEventListener("click", () => addLoad());
+
+function collectOptions() {
+  const loads = Array.from($("loads").querySelectorAll(".loadrow")).map(r => {
+    const [sel, where, val] = r.children;
+    return { type: sel.value, on: where.value, value: val.value };
+  }).filter(l => l.type === "gravity" || l.on || l.value);
+  return {
+    operation: $("operation").value, thickness: $("thickness").value, angle: $("angle").value,
+    projection: $("projection").value, assume_through: $("assume_through").checked,
+    material: $("material").value, mesh_size: $("mesh_size").value, order: $("order").value,
+    fixes: $("fixes").value.split(";"), loads, modes: $("modes").value, static: $("static").checked,
+  };
+}
+
+// ---------------------------------------------------------------- run
+$("run").addEventListener("click", async () => {
+  if (!job) return;
+  $("run").disabled = true;
+  $("card-run").classList.remove("hidden");
+  $("results").classList.add("hidden");
+  msg("run-msg", "");
+  try {
+    job = await api(`/api/jobs/${encodeURIComponent(job.id)}/run`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                               body: JSON.stringify(collectOptions()) });
+    $("card-run").scrollIntoView({ behavior: "smooth", block: "start" });
+    poll();
+  } catch (e) { msg("run-msg", e.message, "err"); $("run").disabled = false; }
+});
+
+async function poll() {
+  clearTimeout(pollTimer);
+  try { job = await api(`/api/jobs/${encodeURIComponent(job.id)}`); } catch (e) { msg("run-msg", e.message, "err"); return; }
+  renderRun();
+  if (job.status === "running") pollTimer = setTimeout(poll, 700);
+  else $("run").disabled = false;
+}
+
+function renderRun() {
+  const running = job.status === "running";
+  $("run-spin").classList.toggle("hidden", !running);
+  const done = job.status === "done" ? 5 : Math.max(0, job.step - (running ? 1 : 0));
+  Array.from($("steps").children).forEach((s, i) => {
+    s.className = "step" + (i < done ? " done" : (running && i === done ? " active" : ""));
+  });
+  $("log").textContent = (job.log || []).join("\n");
+  $("log").scrollTop = $("log").scrollHeight;
+  if (job.status === "error") msg("run-msg", "실패: " + job.error, "err");
+  else if (running) $("run-msg").innerHTML = `<div class="note">실행 중… ${job.elapsed ? job.elapsed.toFixed(0) + "초" : ""} (모델 크기에 따라 수십 초~수 분)</div>`;
+  else $("run-msg").innerHTML = "";
+  if (job.status === "done") showResults();
+}
+
+function showResults() {
+  const r = job.results || {};
+  const st = r.static, md = r.modal, mp = r.mass_properties || {};
+  const tiles = [];
+  if (st) {
+    const sf = st.safety_factor;
+    const cls = sf >= 1.5 ? "ok" : sf >= 1 ? "warn" : "bad";
+    const word = sf >= 1.5 ? "안전" : sf >= 1 ? "주의" : "항복 초과";
+    tiles.push(["최대 von Mises 응력", st.max_von_mises_MPa.toPrecision(4) + " MPa"]);
+    tiles.push(["최대 변위", st.max_displacement_mm.toPrecision(4) + " mm"]);
+    tiles.push([`안전율 (항복 ${r.material ? r.material.yield_strength : ""} MPa)`, `${sf.toPrecision(3)} · ${word}`, cls]);
+  }
+  if (md && md.frequencies_Hz.length) tiles.push(["1차 고유진동수", md.frequencies_Hz[0].toPrecision(4) + " Hz"]);
+  if (mp.mass_kg !== undefined) tiles.push(["질량", mp.mass_kg.toPrecision(4) + " kg"]);
+  $("tiles").innerHTML = tiles.map(([k, v, c]) => `<div class="tile ${c || ""}"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
+  const f = job.files || {};
+  const acts = [];
+  if (f["report.html"]) acts.push(`<a class="btn" href="${f["report.html"]}" target="_blank" rel="noopener">📊 보고서 새 창으로 열기</a>`);
+  acts.push(`<button type="button" id="open-folder">📁 결과 폴더 열기</button>`);
+  if (f["model.stl"]) acts.push(`<a class="btn" href="${f["model.stl"]}?download=1">⬇ 3D 모델 (STL)</a>`);
+  if (f["results.vtk"]) acts.push(`<a class="btn" href="${f["results.vtk"]}?download=1">⬇ 해석 결과 (VTK)</a>`);
+  if (f["results.json"]) acts.push(`<a class="btn" href="${f["results.json"]}?download=1">⬇ 수치 결과 (JSON)</a>`);
+  $("actions").innerHTML = acts.join("");
+  $("open-folder").onclick = () => api(`/api/jobs/${encodeURIComponent(job.id)}/open`, { method: "POST" }).catch(e => msg("run-msg", e.message, "err"));
+  $("warn-list").innerHTML = (r.warnings || []).map(w => `<div class="msg warn">${esc(w)}</div>`).join("");
+  if (f["report.html"]) { const fr = $("report"); const src = f["report.html"] + "?t=" + Date.now(); if (!fr.src.includes(f["report.html"]) || !fr.dataset.job || fr.dataset.job !== job.id + job.elapsed) { fr.src = src; fr.dataset.job = job.id + job.elapsed; } }
+  $("results").classList.remove("hidden");
+}
+</script>
+</body>
+</html>

@@ -18,8 +18,14 @@ dev = ["pytest>=7"]
 [project.scripts]
 drawing2fea = "drawing2fea.cli:main"
 
+[project.gui-scripts]
+drawing2fea-gui = "drawing2fea.gui:main"
+
 [tool.setuptools.packages.find]
 include = ["drawing2fea*"]
+
+[tool.setuptools.package-data]
+"drawing2fea.gui" = ["static/*", "assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

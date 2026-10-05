@@ -13,6 +13,32 @@
                  └─ ④ 출력: model.stl, results.vtk(ParaView), results.json, report.html
 ```
 
+## 데스크톱 앱: 아이콘 더블 클릭 → 도면 끌어다 놓기
+
+<img src="drawing2fea/gui/assets/icon.png" width="96" align="right" alt="Drawing2FEA 아이콘">
+
+1. **실행 아이콘을 더블 클릭**합니다. 앱 창이 열립니다(Edge/Chrome 앱 창, 없으면 기본 브라우저).
+2. 2D 도면을 창에 **끌어다 놓거나 [📎 파일 첨부]** 버튼으로 선택합니다. 지원 형식은 `.dxf`, `.json`입니다. `.dwg`는 ODA File Converter가 설치되어 있어야 합니다.
+3. 도면 인식 결과를 확인합니다. 3면도에서 인식한 구멍 번호(`hole:0` …)가 그림에 표시됩니다.
+4. 필요하면 재료·고정 위치·하중을 고칩니다. 칩을 누르면 바로 입력되고, 빈칸으로 두면 도면 주석이나 기본값을 씁니다.
+5. **[▶ 3D 모델링 + 해석 실행]**을 누르면 단계별 진행 상황이 표시됩니다.
+6. 결과 요약(최대 응력, 변위, 안전율 판정, 고유진동수, 질량)과 보고서가 앱 안에 표시됩니다. 보고서를 새 창으로 열거나, 결과 폴더를 열거나, STL·VTK·JSON을 내려받을 수 있습니다.
+
+각 해석은 `문서/Drawing2FEA/jobs/<날짜_도면이름>/`에 저장됩니다. 원본 도면, 인식 그림, 입력 조건, 결과가 함께 들어 있습니다.
+
+### 실행 아이콘 만들기
+
+| 방법 | 설명 |
+|---|---|
+| **Windows 실행 파일 (Python 불필요)** | GitHub의 *Actions → Build desktop app*에서 `Drawing2FEA-Windows.zip`을 내려받아 압축을 풀고 `Drawing2FEA.exe`를 더블 클릭합니다. 앱의 **[🖥 바탕화면 아이콘 만들기]** 버튼을 누르면 바탕화면에 아이콘이 생깁니다. macOS는 `Drawing2FEA-macOS.zip`을 받으면 됩니다. |
+| **Windows (Python 설치됨)** | 이 폴더의 `install_windows.bat`을 더블 클릭합니다. 라이브러리를 설치하고 바탕화면과 시작 메뉴에 아이콘을 만듭니다. 설치 없이 `Drawing2FEA.pyw`를 더블 클릭해도 실행됩니다. |
+| **macOS** | `install_mac.command`를 더블 클릭하면 바탕화면에 `Drawing2FEA.app`이 생깁니다. |
+| **Linux / 직접** | `drawing2fea shortcut`을 실행하면 바탕화면과 앱 메뉴에 실행 아이콘이 생깁니다. `drawing2fea gui`로 바로 실행할 수도 있습니다. |
+
+실행 파일은 직접 빌드할 수도 있습니다: `pip install pyinstaller && pyinstaller packaging/drawing2fea.spec`. 결과물은 `dist/Drawing2FEA/`에 생깁니다.
+
+창을 닫으면 백그라운드 프로그램은 약 3분 뒤 자동으로 종료됩니다. 해석이 진행 중이면 끝날 때까지 기다립니다. 앱은 이 컴퓨터(127.0.0.1)에서만 접속할 수 있고, 도면이 외부로 전송되지 않습니다.
+
 ## 설치
 
 ```bash
@@ -143,7 +169,7 @@ python -m drawing2fea run part.dxf --views --projection first     # 강제 지�
 
 ## 검증 (tests/)
 
-`python -m pytest`: 테스트 30개. 해석해와 비교한 항목은 다음과 같습니다.
+`python -m pytest`: 테스트 35개. 해석해와 비교한 항목은 다음과 같습니다.
 
 | 항목 | 기준 | 결과 |
 |---|---|---|
@@ -172,6 +198,8 @@ drawing2fea/
   report.py    그림 + HTML 보고서
   pipeline.py  전체 자동화
   cli.py       명령행
+  gui/         데스크톱 앱 (로컬 웹 UI, 끌어다 놓기, 아이콘, 바로가기 생성)
+packaging/     실행 파일 빌드(PyInstaller spec), 아이콘 생성 스크립트
 ```
 
 ## 한계
